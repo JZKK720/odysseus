@@ -1,0 +1,110 @@
+name: docker-publish
+
+# Build and push the Odysseus container image to GitHub Container Registry.
+#
+# Tags produced per build:
+#   main            — moving tag, rebuilt on every push to main
+#   sha-<7char>     — immutable alias for pinning
+#   main-extras     — same build with INSTALL_OPTIONAL=true (PyMuPDF, AGPL)
+#   sha-<7char>-extras — immutable extras alias
+#
+# The workflow fires only on push to main and on manual workflow_dispatch.
+# A `dev` branch trigger is intentionally omitted while the fork is
+# single-branch; add `dev` back to the branches list once the fork
+# actually has a dev branch you want builds from.
+#
+# Default ODYSSEUS_TAG in the compose files is "main". Pin a
+# sha-<7char> alias for reproducible deployments. To track the moving
+# upstream dev edge, build from a known-good sha and bump ODYSSEUS_TAG
+# in .env.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: read repo contents, write to GHCR packages.
+# The repo default permission is "read" — this per-job override is required.
+permissions:
+  contents: read
+  packages: write
+
+# Cancel superseded runs on the same ref to save Actions minutes.
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4
+
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4
+
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          # Use the lowercased owner namespace for the docker login so
+          # credentials are stored under the canonical key. The push
+          # still works against mixed-case usernames because GHCR is
+          # case-insensitive, but the lowercased form is the one
+          # docker/build-push-action accepts in image tags.
+          username: ${{ steps.meta.outputs.image_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Resolve the short SHA once and reuse it across both legs.
+      # IMAGE_OWNER is forced to lowercase: Docker/Buildx rejects mixed
+      # case in the registry namespace (e.g. ghcr.io/JZKK720/odysseus
+      # fails with "repository name must be lowercase"), even though
+      # GitHub usernames are case-insensitive. GHCR is too — jzkk720
+      # and JZKK720 resolve to the same user.
+      - id: meta
+        run: |
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "image_owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      # Slim build: MIT core only.
+      - name: build (slim)
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          load: false
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.image_owner }}/odysseus:main
+            ghcr.io/${{ steps.meta.outputs.image_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.title=odysseus
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          cache-from: type=gha,scope=odysseus-slim-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=odysseus-slim-${{ github.ref_name }}
+          provenance: true
+          sbom: true
+
+      # Extras build: AGPL PyMuPDF (and friends) included.
+      - name: build (extras)
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          load: false
+          build-args: INSTALL_OPTIONAL=true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.image_owner }}/odysseus:main-extras
+            ghcr.io/${{ steps.meta.outputs.image_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}-extras
+          labels: |
+            org.opencontainers.image.title=odysseus-extras
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}-extras
+          cache-from: type=gha,scope=odysseus-extras-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=odysseus-extras-${{ github.ref_name }}
+          provenance: true
+          sbom: true
