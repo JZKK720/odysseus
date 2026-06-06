@@ -49,13 +49,24 @@ jobs:
         if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          # Use the lowercased owner namespace for the docker login so
+          # credentials are stored under the canonical key. The push
+          # still works against mixed-case usernames because GHCR is
+          # case-insensitive, but the lowercased form is the one
+          # docker/build-push-action accepts in image tags.
+          username: ${{ steps.meta.outputs.image_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Resolve the short SHA once and reuse it across both legs.
+      # IMAGE_OWNER is forced to lowercase: Docker/Buildx rejects mixed
+      # case in the registry namespace (e.g. ghcr.io/JZKK720/odysseus
+      # fails with "repository name must be lowercase"), even though
+      # GitHub usernames are case-insensitive. GHCR is too — jzkk720
+      # and JZKK720 resolve to the same user.
       - id: meta
         run: |
           echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "image_owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       # Slim build: MIT core only.
       - name: build (slim)
@@ -65,8 +76,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           load: false
           tags: |
-            ghcr.io/${{ github.repository_owner }}/odysseus:main
-            ghcr.io/${{ github.repository_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}
+            ghcr.io/${{ steps.meta.outputs.image_owner }}/odysseus:main
+            ghcr.io/${{ steps.meta.outputs.image_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}
           labels: |
             org.opencontainers.image.title=odysseus
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -86,8 +97,8 @@ jobs:
           load: false
           build-args: INSTALL_OPTIONAL=true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/odysseus:main-extras
-            ghcr.io/${{ github.repository_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}-extras
+            ghcr.io/${{ steps.meta.outputs.image_owner }}/odysseus:main-extras
+            ghcr.io/${{ steps.meta.outputs.image_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}-extras
           labels: |
             org.opencontainers.image.title=odysseus-extras
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
