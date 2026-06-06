@@ -45,28 +45,30 @@ jobs:
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4
 
+      # Resolve the short SHA and lowercased image owner FIRST, before
+      # any step that needs them. IMAGE_OWNER is forced to lowercase:
+      # Docker/Buildx rejects mixed case in the registry namespace
+      # (e.g. ghcr.io/JZKK720/odysseus fails with "repository name
+      # must be lowercase"), even though GitHub usernames are
+      # case-insensitive. GHCR is too — jzkk720 and JZKK720 resolve
+      # to the same user. This step MUST run before docker/login-action
+      # and the build steps, since they reference its outputs.
+      - id: meta
+        run: |
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "image_owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4
         if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
           # Use the lowercased owner namespace for the docker login so
-          # credentials are stored under the canonical key. The push
-          # still works against mixed-case usernames because GHCR is
-          # case-insensitive, but the lowercased form is the one
+          # the credentials key and the image tag namespace match. The
+          # push still authenticates against the case-insensitive
+          # GHCR account, but the lowercased form is what
           # docker/build-push-action accepts in image tags.
           username: ${{ steps.meta.outputs.image_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Resolve the short SHA once and reuse it across both legs.
-      # IMAGE_OWNER is forced to lowercase: Docker/Buildx rejects mixed
-      # case in the registry namespace (e.g. ghcr.io/JZKK720/odysseus
-      # fails with "repository name must be lowercase"), even though
-      # GitHub usernames are case-insensitive. GHCR is too — jzkk720
-      # and JZKK720 resolve to the same user.
-      - id: meta
-        run: |
-          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "image_owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       # Slim build: MIT core only.
       - name: build (slim)
