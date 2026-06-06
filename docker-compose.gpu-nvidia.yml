@@ -125,8 +125,13 @@ services:
           sed "s|__SEARXNG_SECRET__|$$secret|g" /tmp/searxng-settings.yml.template > /etc/searxng/settings.yml
         fi
         exec /usr/local/searxng/entrypoint.sh
+    # Container-internal port stays 8080 (the searxng image hardcodes it and
+    # the healthcheck/SEARXNG_INSTANCE use container DNS). The host-side
+    # port is configurable via SEARXNG_BIND_PORT — default 18080 instead of
+    # 8080 because 8080 is a common dev-server port (open-webui, kedios,
+    # various others) and the Windows host often already has it bound.
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${SEARXNG_BIND:-127.0.0.1}:${SEARXNG_BIND_PORT:-18080}:8080"
     volumes:
       - searxng-data:/etc/searxng
       - ./config/searxng/settings.yml:/tmp/searxng-settings.yml.template:ro,z
