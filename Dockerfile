@@ -29,6 +29,27 @@ COPY requirements.txt requirements-optional.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$INSTALL_OPTIONAL" = "true" ]; then pip install --no-cache-dir -r requirements-optional.txt; fi
 
+# Pre-bake the default FastEmbed model so the container doesn't need
+# network egress (HuggingFace) at first chat/embedding request. Without
+# this step, the slim image fails the first VectorRAG init on hosts
+# where HF is blocked, leaving RAG in DEGRADED state forever. The model
+# lands in /app/.cache/fastembed, which matches FASTEMBED_CACHE_PATH in
+# .env.example and is owned by root here; the entrypoint chowns /app
+# recursively to PUID:PGID at first boot, so the model ends up readable
+# by the app user too.
+#
+# Set FASTEMBED_MODEL_BAKE=false in the build to skip (saves ~90 MB
+# and ~1-2 min on the workflow when the host definitely has HF access
+# at runtime and you want a smaller image).
+ARG FASTEMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
+ARG FASTEMBED_MODEL_BAKE=true
+RUN if [ "$FASTEMBED_MODEL_BAKE" = "true" ]; then \
+      FASTEMBED_CACHE_PATH=/app/.cache/fastembed \
+      HF_HUB_DISABLE_SYMLINKS=1 \
+      python -c "from fastembed import TextEmbedding; t = TextEmbedding('${FASTEMBED_MODEL}'); list(t.embed(['warmup']))" \
+      && echo "FastEmbed model '${FASTEMBED_MODEL}' pre-baked to /app/.cache/fastembed"; \
+    fi
+
 # Copy app code
 COPY . .
 
