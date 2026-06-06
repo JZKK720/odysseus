@@ -2,21 +2,27 @@ name: docker-publish
 
 # Build and push the Odysseus container image to GitHub Container Registry.
 #
-# Tags produced per build (branch axis):
-#   <branch>          — moving tag, e.g. "dev", "main"
-#   sha-<7char>       — immutable alias for pinning
-#   <branch>-extras   — same build with INSTALL_OPTIONAL=true (PyMuPDF, AGPL)
+# Tags produced per build:
+#   main            — moving tag, rebuilt on every push to main
+#   sha-<7char>     — immutable alias for pinning
+#   main-extras     — same build with INSTALL_OPTIONAL=true (PyMuPDF, AGPL)
 #   sha-<7char>-extras — immutable extras alias
 #
-# Default ODYSSEUS_TAG in the compose files is "dev" (matches CONTRIBUTING.md
-# branch model: dev = moving edge, main = curated stable). Pin a sha tag for
-# reproducible deployments.
+# The workflow fires only on push to main and on manual workflow_dispatch.
+# A `dev` branch trigger is intentionally omitted while the fork is
+# single-branch; add `dev` back to the branches list once the fork
+# actually has a dev branch you want builds from.
+#
+# Default ODYSSEUS_TAG in the compose files is "main". Pin a
+# sha-<7char> alias for reproducible deployments. To track the moving
+# upstream dev edge, build from a known-good sha and bump ODYSSEUS_TAG
+# in .env.
 
 on:
   push:
-    branches: [dev, main]
+    branches: [main]
   pull_request:
-    branches: [dev, main]
+    branches: [main]
   workflow_dispatch:
 
 # Least privilege: read repo contents, write to GHCR packages.
@@ -59,7 +65,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           load: false
           tags: |
-            ghcr.io/${{ github.repository_owner }}/odysseus:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/odysseus:main
             ghcr.io/${{ github.repository_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}
           labels: |
             org.opencontainers.image.title=odysseus
@@ -80,7 +86,7 @@ jobs:
           load: false
           build-args: INSTALL_OPTIONAL=true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/odysseus:${{ github.ref_name }}-extras
+            ghcr.io/${{ github.repository_owner }}/odysseus:main-extras
             ghcr.io/${{ github.repository_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}-extras
           labels: |
             org.opencontainers.image.title=odysseus-extras

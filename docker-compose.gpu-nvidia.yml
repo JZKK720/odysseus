@@ -15,7 +15,7 @@ services:
     # Override ODYSSEUS_IMAGE / ODYSSEUS_TAG in .env to pin a specific
     # build (e.g. ODYSSEUS_TAG=sha-1a2b3c4 for an immutable alias).
     # See .github/workflows/docker-publish.yml for the publish flow.
-    image: ${ODYSSEUS_IMAGE:-ghcr.io/jzkk720/odysseus}:${ODYSSEUS_TAG:-dev}
+    image: ${ODYSSEUS_IMAGE:-ghcr.io/jzkk720/odysseus}:${ODYSSEUS_TAG:-main}
     pull_policy: always
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:-7000}:7000"

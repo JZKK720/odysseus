@@ -9,14 +9,16 @@ changes back in.
 
 | Branch | What it is |
 | --- | --- |
-| `upstream/dev`   | upstream moving edge (pewdiepie-archdaemon/odysseus) |
-| `upstream/main`  | upstream curated stable |
-| `origin/main`    | your fork's mirror of upstream stable (default clone branch) |
-| `origin/dev`     | your fork's mirror of upstream dev |
+| `upstream/dev`   | upstream moving edge (pewdiepie-archdaemon/odysseus) — not built by this fork yet |
+| `upstream/main`  | upstream curated stable — built by this fork |
+| `origin/main`    | your fork's default branch — the only one that triggers an image build right now |
 | `origin/feat/*`  | your work-in-progress branches |
 
-CONTRIBUTING.md in the upstream repo says PRs go to `dev`, and end-users
-clone `dev` by default. Your fork follows the same convention.
+CONTRIBUTING.md in the upstream repo says PRs go to `dev`. Your fork is
+single-branch for now: `main` is the default and the only branch that
+fires the publish workflow. To add `dev` later, push a `dev` branch to
+origin and add `dev` to the `branches:` list in
+`.github/workflows/docker-publish.yml`.
 
 ## Day-to-day: pull the latest image
 
@@ -27,14 +29,14 @@ docker compose pull
 docker compose up -d
 ```
 
-…always pulls the current `dev` tag before starting containers. No
+…always pulls the current `main` tag before starting containers. No
 `--build` flag, no local build, no Python install on the host.
 
-To pin a specific build instead of tracking `dev`:
+To pin a specific build instead of tracking `main`:
 
 ```bash
 # 1. Find the sha tag from the workflow run you want:
-gh run list --workflow docker-publish.yml --branch dev --limit 20 \
+gh run list --workflow docker-publish.yml --branch main --limit 20 \
   --json databaseId,headSha,conclusion,createdAt
 
 # 2. Set it in .env:
@@ -46,29 +48,9 @@ docker compose up -d
 ## Syncing from upstream
 
 The image is rebuilt automatically by `.github/workflows/docker-publish.yml`
-whenever commits land on `dev` or `main` of your fork. But for your fork's
-**source code** to track upstream, sync your branches periodically.
-
-### Sync `dev` (the common case)
-
-```bash
-# Make sure you're on a clean working tree first:
-git status --short
-
-# From origin/main (your fork's mirror of upstream stable):
-git fetch upstream
-git checkout dev
-git merge --ff-only upstream/dev || git rebase upstream/dev
-
-# If there are local commits on dev, rebase onto upstream/dev:
-#   git rebase upstream/dev
-#   git push --force-with-lease origin dev
-
-git push origin dev
-```
-
-The `docker-publish.yml` workflow will run on the push to `origin/dev` and
-rebuild the `:dev` image.
+whenever commits land on `main` of your fork (the only trigger branch
+right now). For your fork's **source code** to track upstream, sync
+periodically.
 
 ### Sync `main` from upstream `main`
 
@@ -78,33 +60,48 @@ git merge --ff-only upstream/main
 git push origin main
 ```
 
-Same effect — the workflow rebuilds `:main` and emits a new
-`sha-<7char>` alias.
+The workflow rebuilds `:main` and emits a new `sha-<7char>` alias on
+the push.
 
-### If you have local commits on `main` or `dev` that aren't in upstream
+### If you ever create a `dev` branch and want it built too
 
-Don't try to merge upstream into a dirty `main`/`dev`. Move your local
-work onto a feature branch first:
+```bash
+# Local:
+git checkout -b dev upstream/dev
+git push -u origin dev
+
+# Then in .github/workflows/docker-publish.yml:
+#   on.push.branches: [main, dev]
+#   …and re-introduce ${{ github.ref_name }} in the image tags.
+```
+
+Until you do that, `dev` on the fork is just a local branch — the
+publish workflow does not see it.
+
+### If you have local commits on `main` that aren't in upstream
+
+Don't merge upstream into a dirty `main`. Move your local work onto a
+feature branch first:
 
 ```bash
 git checkout -b feat/<topic>
 git push origin feat/<topic>
-# Open PR from feat/<topic> → origin/dev (or main, per CONTRIBUTING.md)
+# Open PR from feat/<topic> → origin/main
 ```
 
-Then sync the clean `dev`/`main` branch as above.
+Then sync the clean `main` branch as above.
 
 ## When you change the image
 
 Any change to `Dockerfile`, `requirements*.txt`, `docker/entrypoint.sh`,
 or `.github/workflows/docker-publish.yml` triggers a rebuild on push
-to `dev` or `main`. You don't need to bump a version anywhere — the
-workflow emits both the moving tag and the immutable `sha-<7char>` alias.
+to `main`. You don't need to bump a version anywhere — the workflow
+emits both the moving `main` tag and the immutable `sha-<7char>` alias.
 
 To trigger a rebuild without a code change (e.g. flaky CI):
 
 ```bash
-gh workflow run docker-publish.yml --ref dev
+gh workflow run docker-publish.yml --ref main
 ```
 
 ## Local development with a hot image
@@ -123,18 +120,18 @@ docker compose up -d
 ```
 
 > Note: when you `build` a service that has an `image:` line in compose,
-> Docker tags the local build as `odysseus:dev` (or whatever tag is in
-> `image:`) and re-uses it on subsequent `up` runs even after `pull`.
-> `docker compose down --rmi local` clears the local build if you want
-> to be sure the GHCR image is back.
+> Docker tags the local build as `odysseus:main` (the tag from the
+> `image:` line) and re-uses it on subsequent `up` runs even after
+> `pull`. `docker compose down --rmi local` clears the local build if
+> you want to be sure the GHCR image is back.
 
 ## Rollback
 
-The `:dev` tag moves. To roll back to a known-good build:
+The `:main` tag moves. To roll back to a known-good build:
 
 ```bash
 # Find a working build from the workflow history:
-gh run list --workflow docker-publish.yml --branch dev --status success --limit 20
+gh run list --workflow docker-publish.yml --branch main --status success --limit 20
 
 # Pin to its sha tag:
 echo "ODYSSEUS_TAG=sha-<7char>" >> .env
@@ -149,7 +146,7 @@ preserved across rollback — only the image changes.
 
 ```bash
 # 1. Image is reachable:
-docker pull ghcr.io/jzkk720/odysseus:dev
+docker pull ghcr.io/jzkk720/odysseus:main
 
 # 2. Compose resolves cleanly:
 docker compose config | grep -E 'image:|pull_policy'

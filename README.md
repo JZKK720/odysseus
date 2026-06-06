@@ -62,16 +62,16 @@ pull request guidelines.
 git clone https://github.com/pewdiepie-archdaemon/odysseus.git
 cd odysseus
 cp .env.example .env       # optional, but recommended for explicit defaults
-docker compose pull        # pulls ghcr.io/jzkk720/odysseus:dev + bundled services
+docker compose pull        # pulls ghcr.io/jzkk720/odysseus:main + bundled services
 docker compose up -d
 ```
-To run the AGPL extras build (PDF viewer, Office extraction; includes PyMuPDF), set `ODYSSEUS_TAG=dev-extras` in `.env` and re-run `docker compose pull && docker compose up -d`. No local build is required for either variant.
+To run the AGPL extras build (PDF viewer, Office extraction; includes PyMuPDF), set `ODYSSEUS_TAG=main-extras` in `.env` and re-run `docker compose pull && docker compose up -d`. No local build is required for either variant.
 
 Open `http://localhost:7000` when the containers are healthy. Docker Compose
 binds the web UI to `127.0.0.1` by default. If the port is taken, set
 `APP_PORT=7001` in `.env` and recreate the container. To pin a specific build
 (e.g. for reproducible deploys), set `ODYSSEUS_TAG=sha-<7char>` — the
-publish workflow emits these immutable aliases alongside the moving `dev` tag.
+publish workflow emits these immutable aliases alongside the moving `main` tag.
 Set `APP_BIND=0.0.0.0` only when you intentionally want LAN/reverse-proxy access.
 
 ### Native Linux / macOS
