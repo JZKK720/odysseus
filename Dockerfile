@@ -33,36 +33,43 @@ RUN pip install --no-cache-dir -r requirements.txt \
 # network egress (HuggingFace) at first chat/embedding request. Without
 # this step, the slim image fails the first VectorRAG init on hosts
 # where HF is blocked, leaving RAG in DEGRADED state forever. The
-# models land in /app/.cache/fastembed, which matches FASTEMBED_CACHE_PATH
-# in .env.example and is owned by root here; the entrypoint chowns
-# /app recursively to PUID:PGID at first boot, so the files end up
-# readable by the app user too.
+# models land in /app/.cache/fastembed, which is the same path the
+# running app will use because FASTEMBED_CACHE_PATH is exported below
+# in the same layer. The entrypoint chowns the whole /app tree to
+# PUID:PGID at first boot (root-created files become readable by the
+# non-root app user), so the bake is reachable on first request.
 #
-# Two models are baked because the app uses them in two different code
-# paths with different model names:
-#   - sentence-transformers/all-MiniLM-L6-v2  — used by src/embeddings.py
-#     (the FastEmbedClient wrapper, controlled by FASTEMBED_MODEL env var)
-#   - qdrant/all-MiniLM-L6-v2-onnx           — used directly by
-#     src/rag_vector.py and src/memory_vector.py via
-#     fastembed.TextEmbedding() with no model_name arg, so they fall
-#     back to the fastembed library default. Baking the library default
-#     too means both code paths find a cached model on first boot.
+# We only need to bake one model: `sentence-transformers/all-MiniLM-L6-v2`.
+# That's the model name `src/embeddings.py` passes to TextEmbedding, AND
+# it's fastembed's library default — so `src/rag_vector.py` and
+# `src/memory_vector.py` (which call `fastembed.TextEmbedding()` with
+# no model_name arg) also pick this same model. (Internally fastembed
+# renames this entry to the qdrant/all-MiniLM-L6-v2-onnx HF repo to
+# download, but you can NOT pass `qdrant/*` to TextEmbedding — it's
+# not in `list_supported_models()` and raises ValueError.)
 #
-# Set FASTEMBED_MODEL_BAKE=false in the build to skip (saves ~200 MB
-# and 1-3 min in CI when the host definitely has HF access at runtime
+# Set FASTEMBED_MODEL_BAKE=false in the build to skip (saves ~95 MB
+# and 1-2 min in CI when the host definitely has HF access at runtime
 # and a smaller image is preferred).
-ARG FASTEMBED_MODELS="sentence-transformers/all-MiniLM-L6-v2 qdrant/all-MiniLM-L6-v2-onnx"
+#
+# Implementation note: the bake lives in a separate script file
+# (docker/bake-fastembed.sh) to avoid the multi-level escaping trap
+# that inline heredoc-style RUN commands fall into with bash -c nested
+# inside sh -c.
+COPY docker/bake-fastembed.sh /usr/local/bin/bake-fastembed.sh
+RUN chmod +x /usr/local/bin/bake-fastembed.sh
 ARG FASTEMBED_MODEL_BAKE=true
 RUN if [ "$FASTEMBED_MODEL_BAKE" = "true" ]; then \
       FASTEMBED_CACHE_PATH=/app/.cache/fastembed \
       HF_HUB_DISABLE_SYMLINKS=1 \
-      bash -c 'set -e; \
-        for m in ${FASTEMBED_MODELS}; do \
-          echo "  - pre-baking $${m}"; \
-          python -c "from fastembed import TextEmbedding; t = TextEmbedding(\"$${m}\"); list(t.embed([\"warmup\"]))" || exit 1; \
-        done; \
-        echo "FastEmbed models pre-baked to /app/.cache/fastembed"'; \
+      /usr/local/bin/bake-fastembed.sh; \
     fi
+
+# Tell the running app where to find the pre-baked models. FastEmbed
+# reads FASTEMBED_CACHE_PATH at instantiation time; without this the
+# runtime default would be /tmp/fastembed_cache (empty), and the bake
+# at /app/.cache/fastembed would be ignored.
+ENV FASTEMBED_CACHE_PATH=/app/.cache/fastembed
 
 # Copy app code
 COPY . .
