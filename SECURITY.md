@@ -22,6 +22,7 @@ Security fixes are handled on the default branch until formal releases are cut.
 - Rotate API keys, webhook secrets, and Odysseus API tokens if they appear in logs, screenshots, demos, or shared chats.
 - Treat shell, model-serving, MCP, email, calendar, and vault features as privileged admin functionality.
 - Common internal-only ports are Odysseus `7000`, SearXNG `8080`, ntfy `8091`, ChromaDB `8100`, Ollama `11434`, and local model/provider APIs such as `8000-8020`.
+- The default `ODYSSEUS_IMAGE` (see `.env.example`) points at a public GHCR package and needs no `docker login`. If you switch to a private package or a private mirror, run `docker login ghcr.io` on each host before `docker compose pull`, and treat the token like any other secret.
 
 ## Publishing A Fork
 

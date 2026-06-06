@@ -22,14 +22,21 @@ End-users cloning the repo will land on `dev` by default. To run the curated/sta
 
 ## Setup
 
-Docker is the recommended path for normal testing:
+Docker is the recommended path for normal testing. The image is published
+to GHCR; no local build is required:
 
 ```bash
 git clone https://github.com/pewdiepie-archdaemon/odysseus.git
 cd odysseus
 cp .env.example .env
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+To test a local code change end-to-end inside Docker, append
+`--build` to the `up` command — compose will fall back to building
+from the local `Dockerfile` and re-tag it as `odysseus:dev` for the
+current run.
 
 Manual development uses Python 3.11+:
 
@@ -55,8 +62,8 @@ node --check static/js/<file-you-changed>.js
 For Docker-related changes:
 
 ```bash
-docker compose config
-docker compose up -d --build
+docker compose pull && docker compose config
+docker compose up -d
 docker compose logs --tail=120 odysseus
 ```
 

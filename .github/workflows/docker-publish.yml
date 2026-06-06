@@ -1,0 +1,93 @@
+name: docker-publish
+
+# Build and push the Odysseus container image to GitHub Container Registry.
+#
+# Tags produced per build (branch axis):
+#   <branch>          — moving tag, e.g. "dev", "main"
+#   sha-<7char>       — immutable alias for pinning
+#   <branch>-extras   — same build with INSTALL_OPTIONAL=true (PyMuPDF, AGPL)
+#   sha-<7char>-extras — immutable extras alias
+#
+# Default ODYSSEUS_TAG in the compose files is "dev" (matches CONTRIBUTING.md
+# branch model: dev = moving edge, main = curated stable). Pin a sha tag for
+# reproducible deployments.
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+# Least privilege: read repo contents, write to GHCR packages.
+# The repo default permission is "read" — this per-job override is required.
+permissions:
+  contents: read
+  packages: write
+
+# Cancel superseded runs on the same ref to save Actions minutes.
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4
+
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4
+
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Resolve the short SHA once and reuse it across both legs.
+      - id: meta
+        run: |
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # Slim build: MIT core only.
+      - name: build (slim)
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          load: false
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/odysseus:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.title=odysseus
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          cache-from: type=gha,scope=odysseus-slim-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=odysseus-slim-${{ github.ref_name }}
+          provenance: true
+          sbom: true
+
+      # Extras build: AGPL PyMuPDF (and friends) included.
+      - name: build (extras)
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          load: false
+          build-args: INSTALL_OPTIONAL=true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/odysseus:${{ github.ref_name }}-extras
+            ghcr.io/${{ github.repository_owner }}/odysseus:sha-${{ steps.meta.outputs.short_sha }}-extras
+          labels: |
+            org.opencontainers.image.title=odysseus-extras
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}-extras
+          cache-from: type=gha,scope=odysseus-extras-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=odysseus-extras-${{ github.ref_name }}
+          provenance: true
+          sbom: true
