@@ -1744,7 +1744,21 @@ async function initAgentSettings() {
 /* ═══════════════════════════════════════════
    APPEARANCE TAB
    ═══════════════════════════════════════════ */
+function initLanguageSwitcher() {
+  var langSelect = document.getElementById('language-select');
+  if (!langSelect) return;
+  var currentLang = localStorage.getItem('odysseus-lang') || 'en';
+  langSelect.value = currentLang;
+  langSelect.addEventListener('change', async function(e) {
+    var newLang = e.target.value;
+    if (window.I18N) {
+      await window.I18N.setLang(newLang);
+    }
+  });
+}
+
 function initAppearance() {
+  initLanguageSwitcher();
   syncAppearanceCheckboxes();
   syncPrivacyCheckboxes();
 

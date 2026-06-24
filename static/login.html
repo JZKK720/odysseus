@@ -251,6 +251,51 @@
 </style>
 </head>
 <body>
+<script nonce="{{CSP_NONCE}}">
+(function(){
+  var lang = localStorage.getItem('odysseus-lang') || 'en';
+  if (lang === 'en') return;
+  var dict = {
+    zh: {
+      'Username': '用户名', 'Password': '密码', 'Confirm Password': '确认密码',
+      'Remember me': '记住我', 'Show password': '显示密码',
+      'Sign In': '登录', 'Sign up': '注册', "Don't have an account? ": '还没有账户？',
+      'Sign in': '登录', 'Create Account': '创建账户',
+      'Create Admin Account': '创建管理员账户',
+      'First-time setup — create your admin account': '首次设置——创建你的管理员账户',
+      'Already have an account? ': '已有账户？',
+      '2FA Code': '双因素验证码', 'Enter 6-digit code': '输入 6 位验证码',
+      'Verify': '验证', 'Passwords do not match': '密码不匹配',
+      'This username is reserved': '此用户名已被保留',
+      'Invalid code': '验证码无效', 'Login failed': '登录失败',
+      'Account creation failed': '创建账户失败'
+    }
+  };
+  var map = dict[lang]; if (!map) return;
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
+  function tr(el){
+    if (!el) return;
+    if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+      var t = el.textContent.trim(); if (map[t]) el.textContent = map[t];
+    }
+    if (el.placeholder && map[el.placeholder]) el.placeholder = map[el.placeholder];
+    if (el.title && map[el.title]) el.title = map[el.title];
+    if (el.getAttribute('aria-label') && map[el.getAttribute('aria-label')])
+      el.setAttribute('aria-label', map[el.getAttribute('aria-label')]);
+  }
+  function applyAll(){
+    document.querySelectorAll('label, button, span, a, input, .setup-note').forEach(tr);
+  }
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', applyAll);
+  else applyAll();
+  // Re-apply after dynamic JS changes (setMode etc.)
+  var obs = new MutationObserver(function(){ applyAll(); });
+  document.addEventListener('DOMContentLoaded', function(){
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+})();
+</script>
 <main class="card">
   <h1 class="logo">
     <svg class="logo-boat" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 4L16 22L6 22Z" fill="currentColor"/><path d="M16 8L16 22L24 22Z" fill="currentColor" opacity="0.6"/><path d="M4 24Q10 20 16 24Q22 28 28 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg><span>Odysseus</span>

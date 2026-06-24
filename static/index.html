@@ -220,6 +220,23 @@
   <link rel="modulepreload" href="/static/js/sessions.js">
   <link rel="modulepreload" href="/static/js/markdown.js">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content, viewport-fit=cover" />
+  <!-- i18n preload: fetch locale JSON synchronously before app boots to avoid FOUC -->
+  <script nonce="{{CSP_NONCE}}">
+  (function(){
+    var lang = localStorage.getItem('odysseus-lang') || 'en';
+    if (lang !== 'en') {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/static/locales/' + lang + '.json?v=' + Date.now(), false);
+        xhr.send();
+        if (xhr.status === 200) {
+          window._i18n = { t: JSON.parse(xhr.responseText), lang: lang };
+          document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
+        }
+      } catch(e) { /* fallback to async load in i18n.js */ }
+    }
+  })();
+  </script>
 </head>
 <body>
   <!-- Loading overlay — hides all flashing until app is ready -->
@@ -1883,6 +1900,15 @@
         <!-- ═══ THEME TAB ═══ -->
 
         <!-- ═══ MEMORY TAB ═══ -->
+        <!-- ═══ LANGUAGE SELECTOR (in Appearance tab) ═══ -->
+        <div class="admin-card" style="padding:10px 16px;margin-top:8px;">
+          <h2 style="margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.6"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span data-i18n="settings.language">Language</span></h2>
+          <select id="language-select" style="background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit;width:100%;max-width:240px;">
+            <option value="en">English</option>
+            <option value="zh">简体中文</option>
+          </select>
+        </div>
+
         <!-- ═══ SHORTCUTS TAB ═══ -->
         <div data-settings-panel="shortcuts" class="hidden">
           <div class="admin-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;">
@@ -2456,6 +2482,7 @@
 <script type="module" src="/static/js/compare/index.js"></script>
 <script type="module" src="/static/js/theme.js"></script>
 <script type="module" src="/static/js/censor.js"></script>
+<script type="module" src="/static/js/i18n.js"></script>
 <script type="module" src="/static/js/settings.js"></script>
 <script type="module" src="/static/js/admin.js"></script>
 <script type="module" src="/static/js/assistant.js"></script>
